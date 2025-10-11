@@ -692,7 +692,6 @@ div.hint-scrollable {
     function placeHints(elements) {
         _initHolder('click');
         const hintLabels = self.genLabels(elements.length);
-        const bof = self.coordinate();
         const style = createElementWithContent("style", _styleForClick);
         holder.prepend(style);
         if (behaviours.regionalHints) {
@@ -707,11 +706,11 @@ div.hint-scrollable {
                 z = getZIndex(elm);
             var left, width = Math.min(r.width, window.innerWidth);
             if (runtime.conf.hintAlign === "right") {
-                left = window.pageXOffset + r.left - bof.left + width;
+                left = window.pageXOffset + r.left + width;
             } else if (runtime.conf.hintAlign === "left") {
-                left = window.pageXOffset + r.left - bof.left;
+                left = window.pageXOffset + r.left;
             } else {
-                left = window.pageXOffset + r.left - bof.left + width / 2;
+                left = window.pageXOffset + r.left + width / 2;
             }
             if (left < window.pageXOffset) {
                 left = window.pageXOffset;
@@ -720,7 +719,7 @@ div.hint-scrollable {
             }
             var link = createElementWithContent('div', hintLabels[i]);
             if (elm.dataset.hint_scrollable) { link.classList.add('hint-scrollable'); }
-            let lTop = Math.max(r.top + window.pageYOffset - bof.top, 0);
+            let lTop = Math.max(r.top, 0) + window.pageYOffset;
             if (lTop === lastTop && Math.abs(left - lastLeft) < 20) {
                 left += 20 - Math.abs(left - lastLeft);
             } else if (left === lastLeft && Math.abs(lTop - lastTop) < 20) {
@@ -763,7 +762,20 @@ div.hint-scrollable {
         }
         self.statusLine = (attrs && attrs.statusLine) || "Hints to click";
 
-        elements = filterInvisibleElements(elements);
+        if (behaviours.scrollable) {
+            var windowHeight = (window.innerHeight || document.documentElement.clientHeight);
+            var windowWidth = (window.innerWidth || document.documentElement.clientWidth);
+            elements = elements.filter(function(n) {
+                if (!(n.offsetHeight && n.offsetWidth && !n.getAttribute('disabled') && getComputedStyle(n).visibility !== 'hidden')) {
+                    return false;
+                }
+                var rect = n.getBoundingClientRect();
+                var completelyInvisible = rect.bottom < 0 || rect.top > windowHeight || rect.right < 0 || rect.left > windowWidth;
+                return !completelyInvisible;
+            });
+        } else {
+            elements = filterInvisibleElements(elements);
+        }
         if (elements.length > 0) {
             placeHints(elements);
         }

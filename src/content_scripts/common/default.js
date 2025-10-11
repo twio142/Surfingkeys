@@ -278,7 +278,7 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
     }, {repeatIgnore: true});
 
     mapkey(";fs", '#1Display hints to focus scrollable elements', function() {
-        hints.create(normal.refreshScrollableElements(), hints.dispatchMouseClick);
+        hints.create(normal.refreshScrollableElements(), hints.dispatchMouseClick, { scrollable: true });
     });
 
     vmapkey("q", '#9Translate word under cursor', function() {
