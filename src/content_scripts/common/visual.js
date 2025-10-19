@@ -145,13 +145,28 @@ function createVisual(clipboard, hints) {
         feature_group: 9,
         code: modifySelection
     });
+    self.mappings.add("W", {
+        annotation: "forward WORD",
+        feature_group: 9,
+        code: modifySelection
+    });
     self.mappings.add("e", {
-        annotation: "forward word",
+        annotation: "forward endofword",
+        feature_group: 9,
+        code: modifySelection
+    });
+    self.mappings.add("E", {
+        annotation: "forward endofWORD",
         feature_group: 9,
         code: modifySelection
     });
     self.mappings.add("b", {
         annotation: "backward word",
+        feature_group: 9,
+        code: modifySelection
+    });
+    self.mappings.add("B", {
+        annotation: "backward WORD",
         feature_group: 9,
         code: modifySelection
     });
@@ -498,15 +513,95 @@ function createVisual(clipboard, hints) {
         self.showCursor();
     }
 
+    function modifyByWORD(alter, sel) {
+        var direction = sel[0];
+        var backwards = direction === "backward";
+        var endOf = sel[1] === "endofWORD";
+
+        if (backwards) {
+            // B: backward WORD
+            var lastPos;
+            var onWhiteSpace = /\s/.test(selection.focusNode.textContent.charAt(selection.focusOffset - 1));
+            if (onWhiteSpace) {
+                // if on whitespace, skip all whitespace backwards
+                do {
+                    lastPos = [selection.focusNode, selection.focusOffset];
+                    selection.modify(alter, "backward", "character");
+                    if (!selection.focusNode || !selection.focusNode.textContent || selection.focusOffset === 0) {
+                        break;
+                    }
+                } while (/\s/.test(selection.focusNode.textContent.charAt(selection.focusOffset - 1)));
+            }
+            // skip non-whitespace backwards
+            do {
+                lastPos = [selection.focusNode, selection.focusOffset];
+                selection.modify(alter, "backward", "character");
+                if (!selection.focusNode || !selection.focusNode.textContent || selection.focusOffset === 0) {
+                    break;
+                }
+            } while (selection.focusNode.textContent.charAt(selection.focusOffset - 1).trim().length > 0);
+        } else {
+            // W or E
+            if (endOf) {
+                // prevent E from stucking
+                selection.modify(alter, "forward", "character");
+            }
+            var lastPos;
+            var onWhiteSpace = /\s/.test(selection.focusNode.textContent.charAt(selection.focusOffset));
+            if (!onWhiteSpace) {
+                // if on non-whitespace, skip all non-whitespace forwards
+                do {
+                    lastPos = [selection.focusNode, selection.focusOffset];
+                    selection.modify(alter, "forward", "character");
+                    if (!selection.focusNode || !selection.focusNode.textContent || selection.focusOffset >= selection.focusNode.textContent.length) {
+                        break;
+                    }
+                } while (selection.focusNode.textContent.charAt(selection.focusOffset).trim().length > 0);
+            }
+
+            if (!endOf) {
+                // W: skip all whitespace forwards
+                do {
+                    lastPos = [selection.focusNode, selection.focusOffset];
+                    selection.modify(alter, "forward", "character");
+                    if (!selection.focusNode || !selection.focusNode.textContent || selection.focusOffset >= selection.focusNode.textContent.length) {
+                        break;
+                    }
+                } while (/\s/.test(selection.focusNode.textContent.charAt(selection.focusOffset)));
+            }
+        }
+    }
+
     function modifySelection() {
         var sel = self.map_node.meta.annotation.split(" ");
         var alter = (state === 2) ? "extend" : "move";
         self.hideCursor();
-        var prevPos = [selection.focusNode, selection.focusOffset];
-        selection.modify(alter, sel[0], sel[1]);
 
-        if (prevPos[0] === selection.focusNode && prevPos[1] === selection.focusOffset) {
-            selection.modify(alter, sel[0], "word");
+        if (sel[1] && sel[1].endsWith("WORD")) {
+            modifyByWORD(alter, sel);
+        } else {
+            var granularity = sel[1];
+            if (granularity === "endofword") {
+                granularity = "word";
+            }
+            var prevPos = [selection.focusNode, selection.focusOffset];
+            selection.modify(alter, sel[0], granularity);
+
+            if (prevPos[0] === selection.focusNode && prevPos[1] === selection.focusOffset) {
+                selection.modify(alter, sel[0], "word");
+            }
+            if (sel[0] === "forward" && sel[1] === "word") { // 'w'
+                if (selection.focusNode && selection.focusNode.textContent && selection.focusOffset >= selection.focusNode.textContent.length) {
+                    // if it's at the end of a line, move one word forward
+                    selection.modify(alter, "forward", "word");
+                } else {
+                    // otherwise, skip whitespaces to find start of next word
+                    while (selection.focusNode && selection.focusNode.textContent && /\s/.test(selection.focusNode.textContent.charAt(selection.focusOffset))) {
+                        if (selection.focusOffset >= selection.focusNode.textContent.length) { break; }
+                        selection.modify(alter, "forward", "character");
+                    }
+                }
+            }
         }
         self.showCursor();
     }
