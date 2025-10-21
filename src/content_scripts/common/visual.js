@@ -246,12 +246,15 @@ function createVisual(clipboard, hints) {
         feature_group: 9,
         code: function() {
             self.hideCursor();
-            var pos = [selection.anchorNode, selection.anchorOffset];
-            selection.collapse(selection.focusNode, selection.focusOffset);
-            selection.extend(pos[0], pos[1]);
+            _swapAnchors();
             self.showCursor();
         }
     });
+    function _swapAnchors() {
+        var pos = [selection.anchorNode, selection.anchorOffset];
+        selection.collapse(selection.focusNode, selection.focusOffset);
+        selection.extend(pos[0], pos[1]);
+    }
     var _units = {
         w: "word",
         l: "lineboundary",
@@ -264,7 +267,23 @@ function createVisual(clipboard, hints) {
             // sentence and paragraphboundary not support in firefox
             // document.getSelection().modify("move", "backward", "paragraphboundary")
             // gets 0x80004001 (NS_ERROR_NOT_IMPLEMENTED)
+            selection.collapseToStart();
+            const lastPos = [selection.focusNode, selection.focusOffset];
+            if (lastPos[1] === 0) {
+                // if at start of a text node, just move one unit forward
+                selection.modify("extend", "forward", unit);
+                return;
+            }
+            selection.modify("extend", "backward", unit);
+            _swapAnchors();
             selection.modify("extend", "forward", unit);
+            if (lastPos[0] === selection.focusNode && lastPos[1] >= selection.focusOffset) {
+                // the original position is supposed to be within the unit selected
+                // if it's not, it's probably because the original position was at the start of the current unit
+                // so restore it and extend forward
+                selection.collapse(lastPos[0], lastPos[1]);
+                selection.modify("extend", "forward", unit);
+            }
         }
     }
     var _yankFunctions = [{}, {
@@ -412,7 +431,7 @@ function createVisual(clipboard, hints) {
         }
     });
 
-    self.mappings.add("V", {
+    self.mappings.add("a", {
         annotation: "Select a word(w) or line(l) or sentence(s) or paragraph(p)",
         feature_group: 9,
         code: function(w) {
@@ -420,6 +439,31 @@ function createVisual(clipboard, hints) {
             state = 2;
             _onStateChange();
             _selectUnit(w);
+            self.showCursor();
+        }
+    });
+
+    self.mappings.add("V", {
+        annotation: "Select entire lines",
+        feature_group: 9,
+        code: function() {
+            self.hideCursor();
+            state = 2;
+            _onStateChange();
+            switch (selection.type) {
+                case "Caret":
+                    _selectUnit("l");
+                    break;
+                case "Range":
+                    const direction = selection.direction;
+                    _swapAnchors();
+                    selection.modify("extend", direction === "forward" ? "backward" : "forward", "lineboundary");
+                    _swapAnchors();
+                    selection.modify("extend", direction, "lineboundary");
+                    break;
+                default:
+                    return;
+            }
             self.showCursor();
         }
     });
