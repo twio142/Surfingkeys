@@ -787,17 +787,20 @@ function createVisual(clipboard, hints) {
     };
 
     self.star = function() {
-        if (selection.focusNode && selection.focusNode.nodeValue) {
-            var query = getWordUnderCursor();
-            if (query.length && query !== ".") {
-                self.hideCursor();
-                var pos = [selection.focusNode, selection.focusOffset];
-                RUNTIME('updateInputHistory', { find: query });
-                self.visualClear();
-                highlight(new RegExp(query, runtime.getCaseSensitive(query) ? "" : "i"));
-                selection.setPosition(pos[0], pos[1]);
-                self.showCursor();
-            }
+        let query;
+        if (selection.type === "Range") {
+            query = selection.toString();
+        } else if (selection.focusNode && selection.focusNode.nodeValue) {
+            query = getWordUnderCursor();
+        }
+        if (query.length && query !== ".") {
+            self.hideCursor();
+            var pos = [selection.focusNode, selection.focusOffset];
+            RUNTIME('updateInputHistory', { find: query });
+            self.visualClear();
+            highlight(new RegExp(query, runtime.getCaseSensitive(query) ? "" : "i"));
+            selection.setPosition(pos[0], pos[1]);
+            self.showCursor();
         }
     };
 
