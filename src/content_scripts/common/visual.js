@@ -749,7 +749,11 @@ function createVisual(clipboard, hints) {
 
     self.restore = function() {
         if (selection && selection.anchorNode) {
-            selection.setPosition(selection.anchorNode, selection.anchorOffset);
+            if (selection.type === "Range") { // use existing selection
+                _incState();
+            } else {
+                selection.setPosition(selection.anchorNode, selection.anchorOffset);
+            }
             self.showCursor();
             self.enter();
         }
@@ -767,21 +771,25 @@ function createVisual(clipboard, hints) {
                 _incState();
                 break;
             default:
-                hints.create(runtime.conf.textAnchorPat, function (element) {
-                    setTimeout(function () {
-                        selection.setPosition(element[0], element[1]);
-                        self.enter();
-                        if (ex === "z") {
-                            if (element[1] === 0) {
-                                selection.extend(element[0], element[0].textContent.length);
-                            } else {
-                                selection.extend(element[0], element[1] + element[2].length);
+                if (selection && selection.type === "Range") { // if selection exists, restore it
+                    self.restore();
+                } else {
+                    hints.create(runtime.conf.textAnchorPat, function (element) {
+                        setTimeout(function () {
+                            selection.setPosition(element[0], element[1]);
+                            self.enter();
+                            if (ex === "z") {
+                                if (element[1] === 0) {
+                                    selection.extend(element[0], element[0].textContent.length);
+                                } else {
+                                    selection.extend(element[0], element[1] + element[2].length);
+                                }
+                                _incState();
                             }
-                            _incState();
-                        }
-                        self.showCursor();
-                    }, 0);
-                });
+                            self.showCursor();
+                        }, 0);
+                    });
+                }
                 break;
         }
     };
@@ -799,6 +807,10 @@ function createVisual(clipboard, hints) {
             RUNTIME('updateInputHistory', { find: query });
             self.visualClear();
             highlight(new RegExp(query, runtime.getCaseSensitive(query) ? "" : "i"));
+            if (state === 2) { // go back to caret mode
+                state = 1;
+                _onStateChange();
+            }
             selection.setPosition(pos[0], pos[1]);
             self.showCursor();
         }
