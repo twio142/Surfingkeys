@@ -694,7 +694,7 @@ div.hint-scrollable {
         const hintLabels = self.genLabels(elements.length);
         const style = createElementWithContent("style", _styleForClick);
         holder.prepend(style);
-        if (behaviours.regionalHints) {
+        if (behaviours.regionalHints || behaviours.scrollable) {
             elements.forEach(function(e, i) {
                 holder.append(createOverlay(e, i, "33"));
             });
@@ -728,7 +728,7 @@ div.hint-scrollable {
             link.style.top = lTop + "px";
             link.style.left = left + "px";
             link.style.zIndex = z + 9999;
-            if (behaviours.regionalHints) {
+            if (behaviours.regionalHints || behaviours.scrollable) {
                 link.style.background = getColor(i);
             }
             link.zIndex = link.style.zIndex;
