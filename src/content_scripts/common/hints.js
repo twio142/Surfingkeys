@@ -442,7 +442,7 @@ div.hint-scrollable {
                         regionalHints.attach(overlay);
                     }, 10);
                 } else {
-                    _onHintKey(elm);
+                    _onHintKey(elm, shiftKey);
                 }
             } else {
                 if (elm.constructor.name === "Array") {
