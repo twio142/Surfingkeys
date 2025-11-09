@@ -34,7 +34,7 @@ function placeHintsHost(host) {
     topLayerElement.appendChild(host);
 }
 
-function createRegionalHints(clipboard) {
+function createRegionalHints(normal, clipboard) {
     const self = new Mode("RegionalHints");
 
     self.mappings = new Trie();
@@ -94,6 +94,15 @@ kbd {
         feature_group: 17,
         code: function() {
             clipboard.write(overlay.link.innerHTML);
+        }
+    });
+
+    self.mappings.add("c", {
+        annotation: "capture element",
+        feature_group: 17,
+        code: function() {
+            normal.captureElement(overlay.link);
+            self.exit(); // Exit regional hints mode after capturing
         }
     });
 
@@ -207,7 +216,7 @@ div.hint-scrollable {
     }
 
     hintsHost.shadowRoot.appendChild(hintsStyle);
-    const regionalHints = createRegionalHints(clipboard);
+    const regionalHints = createRegionalHints(normal, clipboard);
 
     let numeric = false;
     /**

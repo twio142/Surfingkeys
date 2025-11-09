@@ -746,108 +746,119 @@ function createNormal(insert) {
     };
 
     self.captureElement = function(elm) {
-        RUNTIME('getCaptureSize', null, function(response) {
-            var scale = response.width / window.innerWidth;
-
-            elm.scrollTop = 0;
-            elm.scrollLeft = 0;
-            var lastScrollTop = -1, lastScrollLeft = -1;
-            // hide scrollbars
-            var overflowY = elm.style.overflowY;
-            elm.style.overflowY = "hidden";
-            var overflowX = elm.style.overflowX;
-            elm.style.overflowX = "hidden";
-            // hide borders
-            var borderStyle = elm.style.borderStyle;
-            elm.style.borderStyle = "none";
-            dispatchSKEvent("front", ['toggleStatus', false]);
-
-            var dx = 0, dy = 0, sx, sy, sw, sh, ww, wh, dh = elm.scrollHeight, dw = elm.scrollWidth;
-            if (elm === document.scrollingElement) {
-                ww = window.innerWidth;
-                wh = window.innerHeight;
-                sx = 0;
-                sy = 0;
-            } else {
-                var br = elm.getBoundingClientRect();
-                // visible rectangle
-                var rc = [
-                    Math.max(br.left, 0),
-                    Math.max(br.top, 0),
-                    Math.min(br.right, window.innerWidth),
-                    Math.min(br.bottom, window.innerHeight)
-                ];
-                ww = rc[2] - rc[0];
-                wh = rc[3] - rc[1];
-                sx = rc[0] * scale;
-                sy = rc[1] * scale;
-            }
-            sw = ww * scale;
-            sh = wh * scale;
-
-            var canvas = document.createElement( "canvas" );
-            canvas.width = dw * scale;
-            canvas.height = dh * scale;
-            var ctx = canvas.getContext( "2d" );
-
-            var br = elm.getBoundingClientRect();
-            var img = document.createElement( "img" );
-
-            img.onload = function() {
-                ctx.drawImage(img, sx, sy, sw, sh, dx, dy, sw, sh);
-                if (lastScrollTop === elm.scrollTop) {
-                    if (lastScrollLeft === elm.scrollLeft) {
-                        // done
-                        dispatchSKEvent("front", ['toggleStatus', true]);
-                        showPopup("<img src='{0}' />".format(canvas.toDataURL( "image/png" )));
-                        // restore overflow
-                        elm.style.overflowY = overflowY;
-                        elm.style.overflowX = overflowX;
-                        // restore borders
-                        elm.style.borderStyle = borderStyle;
-                    } else {
-                        lastScrollTop = -1;
-                        elm.scrollTop = 0;
-                        dy = 0;
-                        lastScrollLeft = elm.scrollLeft;
-                        if (elm.scrollLeft + 2 * ww < dw) {
-                            elm.scrollLeft += ww;
-                            dx += ww * scale;
-                        } else {
-                            elm.scrollLeft += dw % ww;
-                            dx = elm.scrollLeft * scale;
-                        }
-                        setTimeout(function() {
-                            RUNTIME('captureVisibleTab', null, function(response) {
-                                img.src = response.dataUrl;
-                            });
-                        }, 1000);
-                    }
-                } else {
-                    lastScrollTop = elm.scrollTop;
-                    if (elm.scrollTop + 2 * wh < dh) {
-                        elm.scrollTop += wh;
-                        dy += wh * scale;
-                    } else {
-                        elm.scrollTop += dh % wh;
-                        dy = elm.scrollTop * scale;
-                    }
-                    setTimeout(function() {
-                        RUNTIME('captureVisibleTab', null, function(response) {
-                            img.src = response.dataUrl;
-                        });
-                    }, 1000);
+        // wait 500 millisecond for keystrokes of Surfingkeys to hide
+        setTimeout(function() {
+            RUNTIME('captureVisibleTab', null, function(response) {
+                var initialDataUrl = response.dataUrl;
+                if (!initialDataUrl) {
+                    return;
                 }
-            };
+                var measurementImage = document.createElement("img");
 
-            // wait 500 millisecond for keystrokes of Surfingkeys to hide
-            setTimeout(function() {
-                RUNTIME('captureVisibleTab', null, function(response) {
-                    img.src = response.dataUrl;
-                });
-            }, 500);
+                measurementImage.onload = function() {
+                    var scale = measurementImage.width / window.innerWidth;
 
-        });
+                    elm.scrollTop = 0;
+                    elm.scrollLeft = 0;
+                    var lastScrollTop = -1, lastScrollLeft = -1;
+                    // hide scrollbars
+                    var overflowY = elm.style.overflowY;
+                    elm.style.overflowY = "hidden";
+                    var overflowX = elm.style.overflowX;
+                    elm.style.overflowX = "hidden";
+                    // hide borders
+                    var borderStyle = elm.style.borderStyle;
+                    elm.style.borderStyle = "none";
+                    dispatchSKEvent("front", ['toggleStatus', false]);
+
+                    var dx = 0, dy = 0, sx, sy, sw, sh, ww, wh, dh = elm.scrollHeight, dw = elm.scrollWidth;
+                    if (elm === document.scrollingElement) {
+                        ww = window.innerWidth;
+                        wh = window.innerHeight;
+                        sx = 0;
+                        sy = 0;
+                    } else {
+                        var br = elm.getBoundingClientRect();
+                        // visible rectangle
+                        var rc = [
+                            Math.max(br.left, 0),
+                            Math.max(br.top, 0),
+                            Math.min(br.right, window.innerWidth),
+                            Math.min(br.bottom, window.innerHeight)
+                        ];
+                        ww = rc[2] - rc[0];
+                        wh = rc[3] - rc[1];
+                        sx = rc[0] * scale;
+                        sy = rc[1] * scale;
+                    }
+                    sw = ww * scale;
+                    sh = wh * scale;
+
+                    var canvas = document.createElement( "canvas" );
+                    canvas.width = dw * scale;
+                    canvas.height = dh * scale;
+                    var ctx = canvas.getContext( "2d" );
+
+                    var stitchImage = document.createElement( "img" );
+
+                    stitchImage.onload = function() {
+                        ctx.drawImage(stitchImage, sx, sy, sw, sh, dx, dy, sw, sh);
+                        if (lastScrollTop === elm.scrollTop) {
+                            if (lastScrollLeft === elm.scrollLeft) {
+                                // done
+                                dispatchSKEvent("front", ['toggleStatus', true]);
+                                showPopup("<img src='{0}' />".format(canvas.toDataURL( "image/png" )));
+                                // restore overflow
+                                elm.style.overflowY = overflowY;
+                                elm.style.overflowX = overflowX;
+                                // restore borders
+                                elm.style.borderStyle = borderStyle;
+                            } else {
+                                lastScrollTop = -1;
+                                elm.scrollTop = 0;
+                                dy = 0;
+                                lastScrollLeft = elm.scrollLeft;
+                                if (elm.scrollLeft + 2 * ww < dw) {
+                                    elm.scrollLeft += ww;
+                                    dx += ww * scale;
+                                } else {
+                                    elm.scrollLeft += (dw % ww) || ww;
+                                    dx = elm.scrollLeft * scale;
+                                }
+                                setTimeout(function() {
+                                    RUNTIME('captureVisibleTab', null, function(response) {
+                                        if (response && response.dataUrl) {
+                                            stitchImage.src = response.dataUrl;
+                                        }
+                                    });
+                                }, 1000);
+                            }
+                        } else {
+                            lastScrollTop = elm.scrollTop;
+                            if (elm.scrollTop + 2 * wh < dh) {
+                                elm.scrollTop += wh;
+                                dy += wh * scale;
+                            } else {
+                                elm.scrollTop += (dh % wh) || wh;
+                                dy = elm.scrollTop * scale;
+                            }
+                            setTimeout(function() {
+                                RUNTIME('captureVisibleTab', null, function(response) {
+                                    if (response && response.dataUrl) {
+                                        stitchImage.src = response.dataUrl;
+                                    }
+                                });
+                            }, 1000);
+                        }
+                    };
+
+                    // Start the stitching loop with the first image we already captured
+                    stitchImage.src = initialDataUrl;
+                };
+
+                measurementImage.src = initialDataUrl;
+            });
+        }, 500);
     };
 
     self.mappings.add("yG", {
