@@ -545,6 +545,8 @@ const Front = (function() {
                                     data: args[0].join("\r")
                                 });
                                 quitNvim();
+                            } else if (event === "SendKeys") {
+                                normal.feedkeys(args[0], 'in');
                             }
                         }
                         nvim.on('nvim:open', () => {
