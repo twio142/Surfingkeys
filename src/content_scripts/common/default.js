@@ -106,7 +106,13 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
         hints.createInputLayer();
     });
     mapkey('i', '#1Go to edit box', function() {
-        hints.create(getCssSelectorsOfEditable(), hints.dispatchMouseClick);
+        hints.create(getCssSelectorsOfEditable(), (element, shiftKey) => {
+            if (!shiftKey) {
+                hints.dispatchMouseClick(element);
+            } else {
+                front.showEditor(element);
+            }
+        });
     });
     mapkey('I', '#1Go to edit box with vim editor', function() {
         hints.create(getCssSelectorsOfEditable(), function(element) {
