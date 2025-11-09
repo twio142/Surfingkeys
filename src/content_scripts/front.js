@@ -597,13 +597,13 @@ function createFront(insert, normal, hints, visual, browser) {
     });
 
     _actions["ace_editor_saved"] = function(response) {
-        if (response.data !== undefined) {
-            onEditorSaved(response.data);
-        }
         if (runtime.conf.focusOnSaved && isEditable(elementBehindEditor)) {
             normal.passFocus(true);
             elementBehindEditor.focus();
             insert.enter(elementBehindEditor);
+        }
+        if (response.data !== undefined) {
+            onEditorSaved(response.data);
         }
     };
     _actions["nextEdit"] = function(response) {
