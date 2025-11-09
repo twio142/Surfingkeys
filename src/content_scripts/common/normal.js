@@ -813,6 +813,15 @@ function createNormal(insert) {
                                 elm.style.overflowX = overflowX;
                                 // restore borders
                                 elm.style.borderStyle = borderStyle;
+                            } else if (elm.scrollWidth <= elm.clientWidth) {
+                                // done
+                                dispatchSKEvent("front", ['toggleStatus', true]);
+                                showPopup("<img src='{0}' />".format(canvas.toDataURL( "image/png" )));
+                                // restore overflow
+                                elm.style.overflowY = overflowY;
+                                elm.style.overflowX = overflowX;
+                                // restore borders
+                                elm.style.borderStyle = borderStyle;
                             } else {
                                 lastScrollTop = -1;
                                 elm.scrollTop = 0;
