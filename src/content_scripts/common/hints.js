@@ -74,23 +74,23 @@ kbd {
     regionalHintsHost.shadowRoot.appendChild(hintsStyle);
 
     self.mappings.add(KeyboardUtils.encodeKeystroke("<Esc>"), {
-        annotation: "Exit regional hints mode",
+        annotation: "Exit",
         feature_group: 17,
         code: function() {
             self.exit();
         }
     });
 
-    self.mappings.add("ct", {
-        annotation: "copy text from target element",
+    self.mappings.add("y", {
+        annotation: "yank text",
         feature_group: 17,
         code: function() {
             clipboard.write(overlay.link.innerText);
         }
     });
 
-    self.mappings.add("ch", {
-        annotation: "copy html from target element",
+    self.mappings.add("s", {
+        annotation: "copy html source",
         feature_group: 17,
         code: function() {
             clipboard.write(overlay.link.innerHTML);
@@ -98,7 +98,7 @@ kbd {
     });
 
     self.mappings.add("d", {
-        annotation: "delete target element",
+        annotation: "delete element",
         feature_group: 17,
         code: function() {
             overlay.link.remove();
@@ -107,7 +107,7 @@ kbd {
     });
 
     self.mappings.add("l", {
-        annotation: "learn more about target element",
+        annotation: "send to LLM chat",
         feature_group: 17,
         code: function() {
             const system = overlay.link.innerText;
