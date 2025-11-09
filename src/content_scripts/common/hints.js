@@ -462,7 +462,7 @@ div.hint-scrollable {
                         regionalHints.attach(overlay);
                     }, 10);
                 } else {
-                    _onHintKey(elm);
+                    _onHintKey(elm, shiftKey);
                 }
             } else {
                 // dispatch (element, shiftKey); the node can't cross scopes, so it rides as
