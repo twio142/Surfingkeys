@@ -90,12 +90,13 @@ initSKFunctionListener("user", {
     },
     getSearchSuggestions: async (url, response, request, callbackId, origin) => {
         if (functionsToListSuggestions.hasOwnProperty(url)) {
-            try {
-                const ret = await functionsToListSuggestions[url](response, request);
+            const ret = functionsToListSuggestions[url](response, request);
+            if (ret instanceof Promise) {
+                ret.then((result) => {
+                    dispatchSKEvent("front", [callbackId, result]);
+                });
+            } else {
                 dispatchSKEvent("front", [callbackId, ret]);
-            } catch (e) {
-                console.error("Search suggestion callback error:", e);
-                dispatchSKEvent("front", [callbackId, []]);
             }
         }
     },
