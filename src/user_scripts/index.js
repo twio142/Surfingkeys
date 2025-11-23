@@ -91,7 +91,13 @@ initSKFunctionListener("user", {
     getSearchSuggestions: (url, response, request, callbackId, origin) => {
         if (functionsToListSuggestions.hasOwnProperty(url)) {
             const ret = functionsToListSuggestions[url](response, request);
-            dispatchSKEvent("front", [callbackId, ret]);
+            if (ret instanceof Promise) {
+                ret.then((result) => {
+                    dispatchSKEvent("front", [callbackId, result]);
+                });
+            } else {
+                dispatchSKEvent("front", [callbackId, ret]);
+            }
         }
     },
     performInlineQuery: (query, callbackId, origin) => {
