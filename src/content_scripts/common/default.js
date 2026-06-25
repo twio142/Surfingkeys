@@ -289,7 +289,6 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
 
     vmapkey("q", '#9Translate word under cursor', function() {
         var w = getWordUnderCursor();
-        browser.readText(w);
         var b = visual.getCursorPixelPos();
         front.performInlineQuery(w, {
             top: b.top,
