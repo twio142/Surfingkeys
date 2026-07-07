@@ -172,12 +172,25 @@ function _initModules() {
 }
 
 
+// MV3 only: user snippets are delivered as a separate userScript bundle that, in a
+// sub-frame, applies them when this content script signals the frame is ready. The
+// two scripts load independently, so complete the handshake either way it resolves:
+// dispatch the event for when the bundle is already listening, and leave a durable
+// DOM marker (readable across execution worlds) for when the bundle loads later and
+// would otherwise miss the event. See the sub-frame branch in src/user_scripts/index.js.
+const FRAME_READY_ATTR = "surfingkeys-frame-ready";
+
 function _initContent(modes) {
     window.frameId = generateQuickGuid();
     runtime.on('settingsUpdated', response => {
         var rs = response.settings;
         applySettings(modes.api, modes.normal, rs);
     });
+
+    if (window !== top) {
+        document.documentElement.setAttribute(FRAME_READY_ATTR, "1");
+        dispatchSKEvent('user', ["runUserScript"]);
+    }
 
     if (runtime.conf.stealFocusOnLoad && !isInUIFrame()
         && document.body && document.body.childElementCount > 1) {
@@ -193,12 +206,8 @@ window.getFrameId = function () {
         && (!window.frameElement || (parseInt("0" + getComputedStyle(window.frameElement).zIndex) >= 0
             && window.frameElement.offsetWidth > 16 && window.frameElement.offsetWidth > 16))
     ) {
+        // _initContent requests the user script for sub-frames (MV3).
         _initContent(_initModules());
-
-        // Only used to load user script for iframes in MV3
-        setTimeout(() => {
-            dispatchSKEvent('user', ["runUserScript"]);
-        }, 100);
     }
     return window.frameId;
 };

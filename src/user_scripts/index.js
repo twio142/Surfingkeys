@@ -303,7 +303,13 @@ const api = {
 export default (extensionRootUrl, uf) => {
     EXTENSION_ROOT_URL = extensionRootUrl;
     if (isInUIFrame()) return;
+    // The snippets may be triggered by the content script's `runUserScript` event
+    // or, if this bundle loaded after that event already fired, by the durable
+    // frame-ready marker checked below. Guard so it runs at most once either way.
+    let done = false;
     userScriptTask = () => {
+        if (done) return;
+        done = true;
         var settings = {}, error = "";
         try {
             uf(api, settings);
@@ -313,6 +319,10 @@ export default (extensionRootUrl, uf) => {
         applyUserSettings({settings, error});
     };
     if (window === top) {
+        userScriptTask();
+    } else if (document.documentElement.getAttribute("surfingkeys-frame-ready")) {
+        // Content script already booted this sub-frame before this bundle loaded,
+        // so its runUserScript event was missed; complete the handshake now.
         userScriptTask();
     }
 };
