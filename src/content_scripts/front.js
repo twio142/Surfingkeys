@@ -377,13 +377,31 @@ function createFront(insert, normal, hints, visual, browser) {
     _actions['userURLs_entered'] = function(message) {
         if (_userURLsHasCustomOnEnter) {
             _userURLsHasCustomOnEnter = false;
-            dispatchSKEvent('user', ['userURLs_onEnter', message.item, message.ctrlKey, message.shiftKey]);
+            dispatchSKEvent('user', ['userURLs_onEnter', message.item, message.ctrlKey, message.shiftKey, message.altKey]);
+        } else if (message.altKey && /^https?:\/\//i.test(message.item.url)) {
+            _actions['openLinkWithAlt']({ url: message.item.url });
         } else {
             RUNTIME('openLink', {
                 tab: { tabbed: message.tabbed, active: !message.ctrlKey },
                 url: message.item.url
             });
         }
+    };
+
+    // Open a link by dispatching a synthetic alt+click on a real anchor in the
+    // content page, so the browser applies whatever it maps alt+click to.
+    _actions['openLinkWithAlt'] = function(message) {
+        const a = document.createElement('a');
+        a.href = message.url;
+        a.style.display = 'none';
+        (document.body || document.documentElement).appendChild(a);
+        a.dispatchEvent(new MouseEvent('click', {
+            altKey: true,
+            bubbles: true,
+            cancelable: true,
+            view: window,
+        }));
+        a.remove();
     };
 
     _actions['containerSelected'] = function(message) {

@@ -347,6 +347,7 @@ function createOmnibar(front, clipboard) {
         } else if (evt.keyCode === KeyboardUtils.keyCodes.enter) {
             handler.activeTab = !evt.ctrlKey;
             handler.tabbed = self.tabbed ^ evt.shiftKey;
+            handler.altKey = evt.altKey;
             handler.onEnter() && front.hidePopup();
         } else if (evt.keyCode === KeyboardUtils.keyCodes.space) {
             const cursor = self.input.selectionStart;
@@ -613,6 +614,25 @@ function createOmnibar(front, clipboard) {
       return input.match(regex);
     }
 
+    // Open a URL, honoring the alt modifier: alt+enter dispatches a synthetic
+    // alt+click on a real anchor in the content page (front.js), letting the
+    // browser apply whatever it does for alt+click; otherwise open normally.
+    // Only http(s) URLs take the alt path: for javascript:/data:/etc. the
+    // anchor click would run/handle them, bypassing openLink's own guards.
+    self.openURL = function(url, tabbed, active, altKey) {
+        if (altKey && /^https?:\/\//i.test(url)) {
+            front.contentCommand({ action: 'openLinkWithAlt', url: url });
+        } else {
+            RUNTIME("openLink", {
+                tab: {
+                    tabbed: tabbed,
+                    active: active
+                },
+                url: url
+            });
+        }
+    };
+
     self.openFocused = function() {
         var ret = false, fi = self.resultsDiv.querySelector('li.focused');
         var url;
@@ -636,13 +656,7 @@ function createOmnibar(front, clipboard) {
                 tabId: parseInt(uid[1])
             });
         } else if (url && url.length) {
-            RUNTIME("openLink", {
-                tab: {
-                    tabbed: this.tabbed,
-                    active: this.activeTab
-                },
-                url: url
-            });
+            self.openURL(url, this.tabbed, this.activeTab, this.altKey);
         }
         return this.activeTab;
     };
@@ -1318,13 +1332,7 @@ function SearchEngine(omnibar, front) {
         } else {
             url = constructSearchURL(self.url, encodeURIComponent(omnibar.input.value));
         }
-        RUNTIME("openLink", {
-            tab: {
-                tabbed: this.tabbed,
-                active: this.activeTab
-            },
-            url: url
-        });
+        omnibar.openURL(url, this.tabbed, this.activeTab, this.altKey);
         return this.activeTab;
     };
     function listSuggestions(suggestions) {
@@ -1651,6 +1659,7 @@ function OpenUserURLs(omnibar, front) {
             tabbed: this.tabbed,
             ctrlKey: !this.activeTab,
             shiftKey: omnibar.tabbed ^ this.tabbed,
+            altKey: this.altKey,
         });
         return this.activeTab;
     };

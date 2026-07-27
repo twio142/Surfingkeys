@@ -134,9 +134,9 @@ initSKFunctionListener("user", {
             hintsCreationResolve = null;
         }
     },
-    userURLs_onEnter: (item, ctrlKey, shiftKey) => {
+    userURLs_onEnter: (item, ctrlKey, shiftKey, altKey) => {
         if (_pendingOnEnter) {
-            _pendingOnEnter(item, ctrlKey, shiftKey);
+            _pendingOnEnter(item, ctrlKey, shiftKey, altKey);
             _pendingOnEnter = null;
         }
     },
