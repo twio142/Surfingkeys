@@ -65,6 +65,7 @@ function createOmnibar(front, clipboard) {
                     uid: fi.uid
                 }, function(ret) {
                     if (ret.response === "Done") {
+                        handler && handler.onItemRemoved && handler.onItemRemoved(fi.uid);
                         var newFI = (getPosition() !== "bottom") ? fi.nextElementSibling : fi.previousElementSibling;
                         fi.remove();
                         if (newFI) {
@@ -1133,6 +1134,21 @@ function OpenTabs(omnibar) {
         omnibar.cachedPromise.then(function(cached) {
             var filtered = filterByTitleOrUrl(cached, omnibar.input.value, runtime.getCaseSensitive(omnibar.input.value));
             omnibar.listURLs(filtered, false);
+        });
+    };
+    self.onItemRemoved = function(uid) {
+        if (!uid || uid[0] !== 'T' || !omnibar.cachedPromise) {
+            return;
+        }
+        var parts = uid.substr(1).split(":");
+        var windowId = parseInt(parts[0]), tabId = parseInt(parts[1]);
+        omnibar.cachedPromise.then(function(cached) {
+            var idx = cached.findIndex(function(tab) {
+                return tab.id === tabId && tab.windowId === windowId;
+            });
+            if (idx !== -1) {
+                cached.splice(idx, 1);
+            }
         });
     };
     return self;
