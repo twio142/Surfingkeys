@@ -408,14 +408,10 @@ function start(browser) {
                 });
                 break;
             case 'previousTab':
+                self.historyTab({ backward: true });
+                break;
             case 'nextTab':
-                getActiveTab(function(tab) {
-                    var index = (command === 'previousTab') ? tab.index - 1 : tab.index + 1;
-                    chrome.tabs.query({ windowId: tab.windowId }, function(tabs) {
-                        index = ((index % tabs.length) + tabs.length) % tabs.length;
-                        chrome.tabs.update(tabs[index].id, { active: true });
-                    });
-                });
+                self.historyTab({ backward: false });
                 break;
             case 'closeTab':
                 getActiveTab(function(tab) {
