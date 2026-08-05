@@ -27,9 +27,10 @@ function createVisual(clipboard, hints) {
             event.sk_stopPropagation = true;
             event.sk_suppressed = true;
 
-            if (KeyboardUtils.isWordChar(event)) {
-                visualSeek(visualf, event.sk_keyName);
-                lastF = [visualf, event.sk_keyName];
+            var chr = seekChar(event.sk_keyName);
+            if (chr) {
+                visualSeek(visualf, chr);
+                lastF = [visualf, chr];
                 exitf = true;
             } else if (Mode.isSpecialKeyOf("<Esc>", event.sk_keyName)) {
                 exitf = true;
@@ -618,19 +619,59 @@ function createVisual(clipboard, hints) {
     // f in visual mode
     var visualf = 0, lastF = null;
 
+    // the character that a key stands for when seeking, or "" for keys that
+    // stand for no character at all, such as <Esc> or the arrow keys.
+    function seekChar(keyName) {
+        if (KeyboardUtils.isPrintable(keyName)) {
+            return keyName;
+        }
+        return KeyboardUtils.decodeKeystroke(keyName) === "<Space>" ? " " : "";
+    }
+
+    // chars that window.find will not fold onto their CJK counterpart, so that
+    // a seek has to look for each variant on its own.
+    var seekVariants = {
+        ".": ".。",
+    };
+
+    function findNearestTextNodeBy(chars, caseSensitive, backwards) {
+        if (chars.length === 1) {
+            return findNextTextNodeBy(chars, caseSensitive, backwards);
+        }
+        var start = [selection.anchorNode, selection.anchorOffset,
+            selection.focusNode, selection.focusOffset];
+        var nearest = null, nearestRange = null;
+        for (var i = 0; i < chars.length; i++) {
+            if (findNextTextNodeBy(chars[i], caseSensitive, backwards)) {
+                var range = selection.getRangeAt(0);
+                var cmp = nearestRange && range.compareBoundaryPoints(Range.START_TO_START, nearestRange);
+                if (!nearestRange || (backwards ? cmp > 0 : cmp < 0)) {
+                    nearestRange = range.cloneRange();
+                    nearest = chars[i];
+                }
+            }
+            if (start[0]) {
+                selection.setBaseAndExtent(...start);
+            }
+        }
+        // search the winner again, so that the selection is left exactly as a
+        // plain search would have left it.
+        return nearest !== null && findNextTextNodeBy(nearest, caseSensitive, backwards);
+    }
+
     function visualSeek(dir, chr) {
         self.hideCursor();
         var lastPosBeforeF = [selection.anchorNode, selection.anchorOffset];
-        if (selection.focusNode
-            && selection.focusNode.textContent
-            && selection.focusNode.textContent.length
-            && selection.focusNode.textContent[selection.focusOffset] === chr
-            && dir === 1
-        ) {
-            // if the char after cursor is the char to find, forward one step.
+        var focusText = selection.focusNode && selection.focusNode.textContent;
+        if (dir === 1 && focusText && selection.focusOffset < focusText.length) {
+            // skip the char under cursor, which a match folded onto it would
+            // otherwise keep finding in place.
             selection.setPosition(selection.focusNode, selection.focusOffset + 1);
         }
-        if (findNextTextNodeBy(chr, true, (dir === -1))) {
+        // only a char that has case needs a case sensitive search, and staying
+        // insensitive for the others is what lets , find ， and ( find （.
+        var caseSensitive = chr.toLowerCase() !== chr.toUpperCase();
+        if (findNearestTextNodeBy(seekVariants[chr] || chr, caseSensitive, (dir === -1))) {
             if (state === 1) {
                 selection.setPosition(selection.focusNode, selection.focusOffset - 1);
             } else {
