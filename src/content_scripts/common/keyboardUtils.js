@@ -147,6 +147,13 @@ KeyboardUtils.getKeyChar = function(event) {
     return character;
 };
 
+// Tells whether a key name from getKeyChar stands for one literal character.
+// Special keys and any key with a modifier are encoded into a single char at
+// 8192 and above, so they are excluded together with multi-char key names.
+KeyboardUtils.isPrintable = function(keyName) {
+    return keyName.length === 1 && keyName.charCodeAt(0) < 8192;
+};
+
 KeyboardUtils.isWordChar = function(event) {
     return (event.keyCode < 123 && event.keyCode >= 97 || event.keyCode < 91 && event.keyCode >= 65 || event.keyCode < 58 && event.keyCode >= 48);
 };
