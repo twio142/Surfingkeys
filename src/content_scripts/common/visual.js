@@ -257,15 +257,138 @@ function createVisual(clipboard, hints) {
         selection.collapse(selection.focusNode, selection.focusOffset);
         selection.extend(pos[0], pos[1]);
     }
+    // a delimiter table, indexed in both directions
+    function _pairTable(pairs) {
+        var openers = {};       // closing char -> opening char
+        for (var k in pairs) {
+            openers[pairs[k]] = k;
+        }
+        return { close: pairs, open: openers };
+    }
+    var _quotes = _pairTable({
+        '"': '"',
+        "'": "'",
+        "‘": "’",
+        "“": "”",
+        "‚": "‘",   // German single
+        "„": "“",   // German double
+        "「": "」",
+        "『": "』"
+    });
+    var _brackets = _pairTable({
+        "(": ")",
+        "[": "]",
+        "{": "}",
+        "（": "）",
+        "【": "】",
+        "《": "》"
+    });
+    // if text[i] closes an earlier delimiter, the index of that opener, else -1
+    function _openerOf(t, text, i) {
+        var c = text[i], open = t.open[c];
+        if (open === undefined || open === c) {
+            // symmetric delimiters are indistinguishable, so they always count as openers
+            return -1;
+        }
+        for (var depth = 1, j = i - 1; j >= 0; j--) {
+            if (text[j] === c) depth++;
+            else if (text[j] === open && --depth === 0) return j;
+        }
+        return -1;
+    }
+    // the index of the delimiter closing the one opened at i, or -1
+    function _closerOf(t, text, i) {
+        var open = text[i], close = t.close[open];
+        if (close === undefined) {
+            return -1;
+        }
+        if (close === open) {
+            return text.indexOf(close, i + 1);
+        }
+        for (var depth = 1, j = i + 1; j < text.length; j++) {
+            if (text[j] === open) depth++;
+            else if (text[j] === close && --depth === 0) return j;
+        }
+        return -1;
+    }
+    // the innermost delimited part containing cursor, as [openIndex, closeIndex]
+    function _pairedPartAt(t, text, cursor) {
+        for (var i = Math.min(cursor, text.length - 1); i >= 0; i--) {
+            var open = _openerOf(t, text, i);
+            if (open >= 0) {
+                // text[i] closes a part: only a cursor sitting on it counts as inside
+                if (i === cursor) return [open, i];
+                i = open;       // otherwise skip the whole part and keep looking outward
+                continue;       // (the loop's i-- steps past the opener)
+            }
+            if (text[i] in t.close) {
+                var close = _closerOf(t, text, i);
+                if (close >= 0) return [i, close];
+            }
+        }
+        return null;
+    }
+    // the closest non-inline ancestor, which bounds the search for a custom unit
+    function _blockAncestorOf(node) {
+        var e = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+        while (e && e !== document.body && getComputedStyle(e).display === "inline") {
+            e = e.parentElement;
+        }
+        return e || document.body;
+    }
+    function _flattenText(root) {           // [text, [[node, startIndex], ...]]
+        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+        var text = "", nodes = [], node;
+        while ((node = walker.nextNode())) {
+            nodes.push([node, text.length]);
+            text += node.data;
+        }
+        return [text, nodes];
+    }
+    // search backward for an opening delimiter, then forward for the one closing it
+    function _selectPair(t, inner) {
+        selection.collapseToStart();
+        if (!selection.focusNode) {
+            return;
+        }
+        var root = _blockAncestorOf(selection.focusNode);
+        var [text, nodes] = _flattenText(root);
+        // measure the cursor as a flat index, as focusNode may be an element
+        var range = document.createRange();
+        range.setStart(root, 0);
+        range.setEnd(selection.focusNode, selection.focusOffset);
+        var part = _pairedPartAt(t, text, range.toString().length);
+        if (!part) {
+            return;
+        }
+        var pos = function (index) {
+            for (var i = nodes.length - 1; i >= 0; i--) {
+                if (index >= nodes[i][1]) return [nodes[i][0], index - nodes[i][1]];
+            }
+        };
+        // inner selects between the delimiters (vim's i"), otherwise they're included (a")
+        var s = pos(inner ? part[0] + 1 : part[0]), e = pos(inner ? part[1] : part[1] + 1);
+        if (s && e) {
+            selection.setBaseAndExtent(s[0], s[1], e[0], e[1]);
+        }
+    }
+    // a unit is either a native unit name accepted by Selection.modify, or a
+    // function that expands the collapsed selection over the unit by itself.
     var _units = {
         w: "word",
         l: "lineboundary",
         s: "sentence",
-        p: "paragraphboundary"
+        p: "paragraphboundary",
+        q: (inner) => _selectPair(_quotes, inner),
+        b: (inner) => _selectPair(_brackets, inner)
     };
-    function _selectUnit(w) {
-        if (getBrowserName() !== "Firefox" || (w !== "p" && w !== "s")) {
-            var unit = _units[w];
+    // `inner` excludes the unit's delimiters, and only function units can honour it,
+    // as Selection.modify defines exactly one extent per granularity.
+    function _selectUnit(w, inner) {
+        var unit = _units[w];
+        if (typeof unit === "function") {
+            unit(inner);
+        } else if (unit && (getBrowserName() !== "Firefox" || (w !== "p" && w !== "s"))) {
             // sentence and paragraphboundary not support in firefox
             // document.getSelection().modify("move", "backward", "paragraphboundary")
             // gets 0x80004001 (NS_ERROR_NOT_IMPLEMENTED)
@@ -289,7 +412,7 @@ function createVisual(clipboard, hints) {
         }
     }
     var _yankFunctions = [{}, {
-        annotation: "Yank a word(w) or line(l) or sentence(s) or paragraph(p)",
+        annotation: "Yank a word(w)/ line(l)/ sentence(s)/ paragraph(p)/ quote(q)/ bracket(b)",
         feature_group: 9,
         code: function(w) {
             var pos = [selection.focusNode, selection.focusOffset];
@@ -434,13 +557,25 @@ function createVisual(clipboard, hints) {
     });
 
     self.mappings.add("a", {
-        annotation: "Select a word(w) or line(l) or sentence(s) or paragraph(p)",
+        annotation: "Select a word(w)/ line(l)/ sentence(s)/ paragraph(p)/ quote(q)/ bracket(b)",
         feature_group: 9,
         code: function(w) {
             self.hideCursor();
             state = 2;
             _onStateChange();
             _selectUnit(w);
+            self.showCursor();
+        }
+    });
+
+    self.mappings.add("i", {
+        annotation: "Select inner quote(q)/ bracket(b), i.e. without the delimiters",
+        feature_group: 9,
+        code: function(w) {
+            self.hideCursor();
+            state = 2;
+            _onStateChange();
+            _selectUnit(w, true);
             self.showCursor();
         }
     });
