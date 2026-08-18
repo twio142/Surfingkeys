@@ -516,6 +516,7 @@ function createOmnibar(front, clipboard) {
         const li = createElementWithContent('li', html);
         if (typeof props === "object") {
             Object.assign(li, props);
+            li._item = props;
         }
         return li;
     };
