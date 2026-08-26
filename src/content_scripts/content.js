@@ -270,7 +270,11 @@ function start(browser) {
             _initContent(modes);
             runtime.on('titleChanged', function() {
                 Mode.checkEventListener(() => {
-                    modes.front.detach();
+                    // The page wiped our event listeners (document.write does this),
+                    // so this module set is dead. Tear its ui host down now rather
+                    // than parking it with detach(), which would leave it live and
+                    // shadowing the host built by the modules replacing it.
+                    modes.front.destroy();
                     modes = _initModules();
                     _initContent(modes);
                     modes.front.attach();
