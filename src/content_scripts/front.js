@@ -31,11 +31,11 @@ function createFront(insert, normal, hints, visual, browser) {
         }
     }
 
-    var frontendPromise;
+    var frontendPromise, currentUiHost;
 
     function newFrontEnd() {
         frontendPromise = new Promise(function (resolve, reject) {
-            createUiHost(browser, (res) => {
+            currentUiHost = createUiHost(browser, (res) => {
                 resolve(res);
                 applyUserSettings();
             });
@@ -828,7 +828,7 @@ function createFront(insert, normal, hints, visual, browser) {
         }
     });
 
-    window.addEventListener('message', function (event) {
+    function _onContentMessage(event) {
         var _message = event.data && (event.data.surfingkeys_content_data || event.data.dictorium_data);
         if (_message === undefined) {
             return;
@@ -844,7 +844,21 @@ function createFront(insert, normal, hints, visual, browser) {
         } else if (_message.action === "performInlineQueryResult") {
             _showQueryResult(_message.pos, _message.result);
         } else if (_message.action === "frontendDestroyed") {
-            frontendPromise = undefined;
+            // Ignore a host that retired after we had already replaced it, otherwise
+            // it would drop the live one and leave two hosts racing on the page.
+            if (!currentUiHost || !_message.hostId || _message.hostId === currentUiHost.hostId) {
+                frontendPromise = undefined;
+                currentUiHost = undefined;
+                if (_message.pendingCommand) {
+                    // The host died before it could deliver this one. Rebuild and
+                    // replay it, with its id kept so a pending callback still matches.
+                    const pendingCommand = _message.pendingCommand;
+                    newFrontEnd();
+                    frontendPromise.then(function() {
+                        runtime.postTopMessage({surfingkeys_uihost_data: pendingCommand});
+                    });
+                }
+            }
         } else if (_active) {
             if (_callbacks[_message.id]) {
                 var f = _callbacks[_message.id];
@@ -876,7 +890,8 @@ function createFront(insert, normal, hints, visual, browser) {
         if (!event.data.dictorium_data) {
             event.stopImmediatePropagation();
         }
-    }, true);
+    }
+    window.addEventListener('message', _onContentMessage, true);
 
     var uiHostDetaching;
     self.attach = function() {
@@ -898,6 +913,27 @@ function createFront(insert, normal, hints, visual, browser) {
                 }, 3000);
             });
         }
+    };
+
+    // Called when this front instance is being thrown away and replaced, see the
+    // re-init in content.js. detach() is the wrong tool there: it only asks the
+    // frontend to go away 3 seconds later and the frontend may refuse, so the
+    // outgoing ui host stays live next to the incoming one. Two hosts on one page
+    // fight over window messages -- both listeners are bound to window, the older
+    // one runs first and calls stopImmediatePropagation, so the newer frontend
+    // never sees its own replies and never finishes loading. Same for this
+    // instance's own message listener, which would keep driving the discarded
+    // module set. So retire what we own, synchronously and unconditionally.
+    self.destroy = function() {
+        if (uiHostDetaching) {
+            clearTimeout(uiHostDetaching);
+            uiHostDetaching = undefined;
+        }
+        window.removeEventListener('message', _onContentMessage, true);
+        const uiHost = currentUiHost;
+        frontendPromise = undefined;
+        currentUiHost = undefined;
+        uiHost && uiHost.retire();
     };
 
     return self;
