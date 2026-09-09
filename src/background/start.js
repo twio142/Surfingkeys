@@ -1823,6 +1823,25 @@ function start(browser) {
             tabIconStatus[tabId] = message.status;
         }
     };
+    self.sendToExtension = function(message, sender, sendResponse) {
+        if (typeof message.extensionId !== "string" || !message.extensionId) {
+            _response(message, sendResponse, {
+                error: "sendToExtension: extensionId must be a non-empty string"
+            });
+            return;
+        }
+        try {
+            chrome.runtime.sendMessage(message.extensionId, message.payload, (resp) => {
+                _response(message, sendResponse, chrome.runtime.lastError
+                    ? { error: chrome.runtime.lastError.message }
+                    : { data: resp });
+            });
+        } catch (e) {
+            _response(message, sendResponse, {
+                error: e.toString()
+            });
+        }
+    };
     self.request = function(message, sender, sendResponse) {
         request(message.url, function(res) {
             _response(message, sendResponse, {
