@@ -280,7 +280,7 @@ function createOmnibar(front, clipboard) {
             _items = null;
             self.collapsingPoint = val;
             self.input.value = val;
-            if (val.length) {
+            if (val.length || searchEngine.listOnOpen) {
                 self.triggerInput();
             }
             eaten = true;
@@ -1381,6 +1381,8 @@ function SearchEngine(omnibar, front) {
                 omnibar.input.setSelectionRange(b[1].length, q.length);
             }
             omnibar.triggerInput();
+        } else if (self.listOnOpen) {
+            omnibar.triggerInput();
         }
     };
     self.onClose = function() {
@@ -1388,6 +1390,7 @@ function SearchEngine(omnibar, front) {
         self.prompt = undefined;
         self.url = undefined;
         self.suggestionURL = undefined;
+        self.listOnOpen = undefined;
     };
     self.onTabKey = function() {
         var fi = omnibar.resultsDiv.querySelector('li.focused');
@@ -1435,6 +1438,20 @@ function SearchEngine(omnibar, front) {
         // This helps prevent rate-limits when typing a long query.
         // E.g. github.com's API rate-limits after only 10 unauthenticated requests.
         _pendingRequest = setTimeout(function() {
+            // A suggestionURL that is not http(s) is the key a callback was
+            // registered under, not something to fetch.
+            if (!/^https?:/.test(self.suggestionURL)) {
+                front.contentCommand({
+                    action: 'getSearchSuggestions',
+                    url: self.suggestionURL,
+                    query: omnibar.input.value,
+                    requestUrl: null,
+                    response: null
+                }, function(resp) {
+                    listSuggestions(Array.isArray(resp.data) ? resp.data : []);
+                });
+                return;
+            }
             const requestUrl = constructSearchURL(self.suggestionURL, encodeURIComponent(omnibar.input.value));
             RUNTIME('request', {
                 method: 'get',
@@ -1461,7 +1478,8 @@ function SearchEngine(omnibar, front) {
         self.aliases[message.alias] = {
             prompt: '' + message.prompt + separatorHtml,
             url: message.url,
-            suggestionURL: message.suggestionURL
+            suggestionURL: message.suggestionURL,
+            listOnOpen: message.options?.listOnOpen
         };
         const searchEngineIconStorageKey = `surfingkeys.searchEngineIcon.${message.prompt}`;
         const searchEngineIcon = localStorage.getItem(searchEngineIconStorageKey);
