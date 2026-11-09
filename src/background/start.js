@@ -603,6 +603,27 @@ function start(browser) {
                     chrome.tabs.remove(tab.id);
                 });
                 break;
+            case 'backOrClose':
+                getActiveTab(function(tab) {
+                    // Chrome's goBack fails with lastError when there is no previous entry,
+                    // which is the only way the background can learn that without the page.
+                    chrome.tabs.goBack(tab.id, function() {
+                        if (!chrome.runtime.lastError || tab.openerTabId === undefined) {
+                            return;
+                        }
+                        chrome.tabs.get(tab.openerTabId, function(opener) {
+                            if (chrome.runtime.lastError || !opener) {
+                                return;
+                            }
+                            // Activate the opener before closing, so Chrome does not
+                            // briefly switch to whichever tab it would pick on close.
+                            chrome.tabs.update(opener.id, { active: true });
+                            chrome.windows.update(opener.windowId, { focused: true });
+                            chrome.tabs.remove(tab.id);
+                        });
+                    });
+                });
+                break;
             case 'proxyThis':
                 getActiveTab(function(tab) {
                     var host = new URL(tab.url || tab.pendingUrl).host;

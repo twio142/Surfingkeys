@@ -21,6 +21,9 @@
         "closeTab": {
             "description": "Close the current tab."
         },
+        "backOrClose": {
+            "description": "Go back in history, or close the tab and return to the tab that opened it."
+        },
         "proxyThis": {
             "description": "Toggle current site in autoproxy_hosts."
         }
