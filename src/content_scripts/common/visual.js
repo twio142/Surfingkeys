@@ -18,6 +18,53 @@ import {
     tabOpenLink,
 } from './utils.js';
 
+// letters the browser's find folds that have no Unicode decomposition to strip
+const FOLDED_LETTERS = { "ß": "ss", "ẞ": "SS" };
+const FOLDED_LETTER = new RegExp(`[${Object.keys(FOLDED_LETTERS).join("")}]`, "u");
+
+// a query with one of FOLDED_LETTERS counts as accented, so `ß` finds only `ß`
+function hasDiacritics(str) {
+    return FOLDED_LETTER.test(str) || /\p{M}/u.test(str.normalize("NFD"));
+}
+
+/**
+ * Strip diacritics from `str` for matching.
+ *
+ * `starts[i]` is the offset in `str` of the character that `text[i]` came from,
+ * with one extra entry for the end, so a match `[s, e)` in `text` is
+ * `[starts[s], starts[e])` in `str`. Ending on the NEXT kept character's offset
+ * means a combining mark after the last matched letter is highlighted with it.
+ *
+ * Only characters whose decomposition has a mark are replaced: a character
+ * that decomposes into other letters (Hangul syllables into jamo) is kept
+ * whole, or a query typed in its composed form would no longer match it.
+ */
+function foldDiacritics(str) {
+    if (!hasDiacritics(str)) {
+        return { text: str, starts: null };
+    }
+    let text = "";
+    const starts = [];
+    let offset = 0;
+    for (const ch of str) {
+        const nfd = ch.normalize("NFD");
+        const stripped = nfd.replace(/\p{M}/gu, "");
+        const kept = FOLDED_LETTERS[ch] ?? (stripped.length < nfd.length ? stripped : ch);
+        for (let i = 0; i < kept.length; i++) {
+            starts.push(offset);
+        }
+        text += kept;
+        offset += ch.length;
+    }
+    starts.push(offset);
+    return { text, starts };
+}
+
+// whether folded offset `i` falls between two characters folded from one letter
+function splitsLetter(starts, i) {
+    return i > 0 && i < starts.length - 1 && starts[i] === starts[i - 1];
+}
+
 function createVisual(clipboard, hints) {
     var self = new Mode("Visual");
 
@@ -866,15 +913,39 @@ function createVisual(clipboard, hints) {
         }
     }
 
+    /**
+     * A query without diacritics matches text with them (`a` finds `ä`), the way
+     * the browser's own find does; a query that has any matches them exactly, so
+     * typing the accent is how the user narrows the search.
+     */
     function highlight(pattern) {
         const gpattern = new RegExp(pattern.source, "g" + pattern.flags);
-        getTextNodes(document.body, pattern).forEach(function(node) {
+        const fold = !hasDiacritics(pattern.source);
+        const filter = fold ? {
+            lastIndex: 0,
+            test: (text) => pattern.test(foldDiacritics(text).text)
+        } : pattern;
+        getTextNodes(document.body, filter).forEach(function(node) {
+            // match against the folded text, then map each match back to offsets
+            // in the node, since folding can change where characters sit
+            const { text, starts } = fold ? foldDiacritics(node.data) : { text: node.data };
             var mtches;
-            while ((mtches = gpattern.exec(node.data)) !== null) {
+            gpattern.lastIndex = 0;
+            while ((mtches = gpattern.exec(text)) !== null) {
                 var match = mtches[0];
                 if (match.length) {
                     var pos = gpattern.lastIndex - match.length;
-                    createMatchMark(node, pos, node, pos + match.length);
+                    var end = gpattern.lastIndex;
+                    if (starts) {
+                        // a match boundary inside one letter's expansion (half
+                        // of `ss` from `ß`) covers no whole letter of the page
+                        if (splitsLetter(starts, pos) || splitsLetter(starts, end)) {
+                            continue;
+                        }
+                        pos = starts[pos];
+                        end = starts[end];
+                    }
+                    createMatchMark(node, pos, node, end);
                 } else {
                     // matches like \b
                     break;
