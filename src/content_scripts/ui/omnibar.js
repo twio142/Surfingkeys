@@ -703,7 +703,13 @@ function createOmnibar(front, clipboard) {
             uid = fi.uid;
             type = uid[0], uid = uid.substr(1);
         }
-        if (type === 'T') {
+        if (type === 'T' && this.splitView) {
+            uid = uid.split(":");
+            RUNTIME('splitWithTab', {
+                tabId: parseInt(uid[1]),
+                active: this.activeTab
+            });
+        } else if (type === 'T') {
             uid = uid.split(":");
             RUNTIME('focusTab', {
                 windowId: parseInt(uid[0]),
