@@ -401,6 +401,7 @@ function createOmnibar(front, clipboard) {
         } else if (evt.keyCode === KeyboardUtils.keyCodes.enter) {
             handler.activeTab = !evt.ctrlKey;
             handler.tabbed = self.tabbed ^ evt.shiftKey;
+            handler.splitView = evt.altKey;
             handler.onEnter() && front.hidePopup();
         } else if (evt.keyCode === KeyboardUtils.keyCodes.space) {
             const cursor = self.input.selectionStart;
@@ -668,6 +669,26 @@ function createOmnibar(front, clipboard) {
       return input.match(regex);
     }
 
+    // Open a URL from a result. With `splitView` (Alt-Enter) it opens in a split
+    // view beside the current tab, as `sf` does for a hinted link; the background
+    // reports any failure as a banner.
+    self.openURL = function(url, tabbed, active, splitView) {
+        if (splitView) {
+            RUNTIME("openSplitView", {
+                url: url,
+                active: active
+            });
+        } else {
+            RUNTIME("openLink", {
+                tab: {
+                    tabbed: tabbed,
+                    active: active
+                },
+                url: url
+            });
+        }
+    };
+
     self.openFocused = function() {
         var ret = false, fi = self.resultsDiv.querySelector('li.focused');
         var url;
@@ -691,13 +712,7 @@ function createOmnibar(front, clipboard) {
                 tabId: parseInt(uid[1])
             });
         } else if (url && url.length) {
-            RUNTIME("openLink", {
-                tab: {
-                    tabbed: this.tabbed,
-                    active: this.activeTab
-                },
-                url: url
-            });
+            self.openURL(url, this.tabbed, this.activeTab, this.splitView);
         }
         return this.activeTab;
     };
@@ -1391,13 +1406,7 @@ function SearchEngine(omnibar, front) {
         } else {
             url = constructSearchURL(self.url, encodeURIComponent(omnibar.input.value));
         }
-        RUNTIME("openLink", {
-            tab: {
-                tabbed: this.tabbed,
-                active: this.activeTab
-            },
-            url: url
-        });
+        omnibar.openURL(url, this.tabbed, this.activeTab, this.splitView);
         return this.activeTab;
     };
     function listSuggestions(suggestions) {
@@ -1739,6 +1748,7 @@ function OpenUserURLs(omnibar, front) {
             tabbed: this.tabbed,
             ctrlKey: !this.activeTab,
             shiftKey: omnibar.tabbed ^ this.tabbed,
+            splitView: this.splitView,
         });
         return this.activeTab;
     };
