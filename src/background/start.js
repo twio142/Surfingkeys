@@ -1533,6 +1533,13 @@ function start(browser) {
      * No `index` is sent. The two halves of a split are adjacent by definition, so
      * where the new tab lands is the browser's to decide, unlike openLink's
      * newTabPosition.
+     *
+     * Vivaldi is asked first. It has `tabs.createSplit` (as does Arc) but draws its
+     * own tiling, so a `splitWithTabId` tab there is just a regular tab. A Vivaldi UI
+     * mod can tile instead: it listens for `openTiled` on Vivaldi's UI extension and
+     * answers `{ok: true}` or `{error}`. When nothing answers -- any other browser,
+     * or Vivaldi without the mod -- the message fails and the split view below runs
+     * as if it had never been tried.
      */
     self.openSplitView = function(message, sender, sendResponse) {
         // Without a tab there is neither anything to split with nor anywhere to say so.
@@ -1543,21 +1550,62 @@ function start(browser) {
             subject: "showBanner",
             message: text
         });
-        if (!isSplitViewAvailable()) {
-            complain("Split view is not supported by this browser.");
-            return;
-        }
         const url = normalizeURL(message.url || "");
         if (url.startsWith("javascript:")) {
             complain("JavaScript URLs are not allowed in such operation.");
             return;
         }
+        tileInVivaldi({action: "openTiled", url: url}, sender.tab, !!message.active, complain, () => {
+            openInSplitView(url, sender.tab, message.active, complain);
+        });
+    };
+    /*
+     * The id of Vivaldi's own UI, the same on every Vivaldi install. Messages to it
+     * reach only a UI mod that listens for them; Vivaldi itself does not.
+     */
+    const VIVALDI_UI_ID = "mpognobbkildjkofajifpdfhcoklimli";
+    /*
+     * Ask a Vivaldi UI mod to tile something with `tab`: `request` is `openTiled`
+     * with a `url`, or `tileTab` with a `tabId`, and gets the window, the tab and
+     * `active` added. The mod answers `{ok: true}` or `{error}`, an error becoming a
+     * banner. `fallback` runs when no mod answered: not Vivaldi, no mod, or a
+     * browser that throws on messaging an extension it does not have.
+     */
+    function tileInVivaldi(request, tab, active, complain, fallback) {
+        const done = (resp) => {
+            if (resp && resp.ok) {
+                return;
+            }
+            if (resp && resp.error) {
+                complain(`Could not open a tiled tab: ${resp.error}`);
+                return;
+            }
+            fallback();
+        };
+        try {
+            chrome.runtime.sendMessage(VIVALDI_UI_ID, {
+                ...request,
+                windowId: tab.windowId,
+                baseTabId: tab.id,
+                active: active
+            }, (resp) => {
+                done(chrome.runtime.lastError ? undefined : resp);
+            });
+        } catch (e) {
+            done(undefined);
+        }
+    }
+    function openInSplitView(url, tab, active, complain) {
+        if (!isSplitViewAvailable()) {
+            complain("Split view is not supported by this browser.");
+            return;
+        }
         try {
             chrome.tabs.create({
                 url: url,
-                active: message.active,
-                openerTabId: sender.tab.id,
-                splitWithTabId: sender.tab.id
+                active: active,
+                openerTabId: tab.id,
+                splitWithTabId: tab.id
             }, function() {
                 if (chrome.runtime.lastError) {
                     complain(`Could not open a split view: ${chrome.runtime.lastError.message}`);
@@ -1569,7 +1617,7 @@ function start(browser) {
             // arrives here instead of in the callback.
             complain(`Could not open a split view: ${e.message}`);
         }
-    };
+    }
     /*
      * Put an OPEN tab in a split view beside the sender's: Alt-Enter on a tab result
      * in the omnibar.
@@ -1596,12 +1644,15 @@ function start(browser) {
             complain("This is already the current tab.");
             return;
         }
-        if (!isSplitViewAvailable()) {
-            complain("Split view is not supported by this browser.");
-            return;
-        }
-        splitWithExistingTab(sender.tab.id, message.tabId, !!message.active).catch((e) => {
-            complain(`Could not open a split view: ${e.message}`);
+        // Vivaldi first, for the same reason as in openSplitView.
+        tileInVivaldi({action: "tileTab", tabId: message.tabId}, sender.tab, !!message.active, complain, () => {
+            if (!isSplitViewAvailable()) {
+                complain("Split view is not supported by this browser.");
+                return;
+            }
+            splitWithExistingTab(sender.tab.id, message.tabId, !!message.active).catch((e) => {
+                complain(`Could not open a split view: ${e.message}`);
+            });
         });
     };
     // A chrome.* call made through its callback, as a promise that rejects on lastError.

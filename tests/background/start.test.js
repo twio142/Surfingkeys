@@ -1899,16 +1899,100 @@ describe('start', () => {
             // The browser feature behind both tabs.createSplit and create's
             // splitWithTabId. Absent from the mock, so a plain bootstrap() is a
             // browser without split view.
+            //
+            // openSplitView asks Vivaldi's UI first. Outside Vivaldi nothing receives
+            // that message, which the browser reports through lastError; every test
+            // here starts from that, and the Vivaldi ones below answer it instead.
+            const VIVALDI_UI_ID = 'mpognobbkildjkofajifpdfhcoklimli';
+            const noReceiver = (chrome) => {
+                chrome.runtime.sendMessage.mockImplementation((id, msg, cb) => {
+                    chrome.runtime.lastError = {message: 'Could not establish connection. Receiving end does not exist.'};
+                    cb && cb();
+                    chrome.runtime.lastError = undefined;
+                });
+            };
+            const vivaldiAnswers = (chrome, resp) => {
+                chrome.runtime.sendMessage.mockImplementation((id, msg, cb) => cb && cb(resp));
+            };
             const withSplitView = (opts = {}) => bootstrap({
                 ...opts,
                 beforeStart: (chrome) => {
                     chrome.tabs.createSplit = jest.fn((tabIds, cb) => cb && cb(5));
+                    noReceiver(chrome);
                 },
             });
+            const withoutSplitView = () => bootstrap({beforeStart: noReceiver});
 
             const bannered = (chrome) => chrome.tabs.sendMessage.mock.calls
                 .filter((c) => c[1] && c[1].subject === 'showBanner')
                 .map((c) => c[1].message);
+
+            describe('in Vivaldi', () => {
+                it('asks the Vivaldi UI to tile the url with the sender', () => {
+                    const {chrome, dispatch} = withSplitView();
+                    vivaldiAnswers(chrome, {ok: true});
+                    dispatch({action: 'openSplitView', url: 'https://dest/', active: true}, senderFor(12));
+                    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(VIVALDI_UI_ID, {
+                        action: 'openTiled',
+                        url: 'https://dest/',
+                        windowId: 1,
+                        baseTabId: 12,
+                        active: true,
+                    }, expect.any(Function));
+                    // Tiled by the mod, so no tab of its own and nothing to report.
+                    expect(chrome.tabs.create).not.toHaveBeenCalled();
+                    expect(bannered(chrome)).toEqual([]);
+                });
+
+                it('sends a missing active as false', () => {
+                    const {chrome, dispatch} = withSplitView();
+                    vivaldiAnswers(chrome, {ok: true});
+                    dispatch({action: 'openSplitView', url: 'https://dest/'}, senderFor(12));
+                    expect(chrome.runtime.sendMessage.mock.calls[0][1].active).toBe(false);
+                });
+
+                it('works without tabs.createSplit, which only the fallback needs', () => {
+                    const {chrome, dispatch} = withoutSplitView();
+                    vivaldiAnswers(chrome, {ok: true});
+                    dispatch({action: 'openSplitView', url: 'https://dest/'}, senderFor(12));
+                    expect(bannered(chrome)).toEqual([]);
+                });
+
+                it('reports a failure from the mod without falling back', () => {
+                    // The mod is there and tried: a regular tab on top of its error
+                    // would hide that it failed.
+                    const {chrome, dispatch} = withSplitView();
+                    vivaldiAnswers(chrome, {error: 'tiling code not found'});
+                    dispatch({action: 'openSplitView', url: 'https://dest/'}, senderFor(12));
+                    expect(chrome.tabs.create).not.toHaveBeenCalled();
+                    expect(bannered(chrome)).toEqual([expect.stringContaining('tiling code not found')]);
+                });
+
+                it('never sends a javascript: url', () => {
+                    const {chrome, dispatch} = withSplitView();
+                    vivaldiAnswers(chrome, {ok: true});
+                    dispatch({action: 'openSplitView', url: 'javascript:alert(1)'}, senderFor(12));
+                    expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+                });
+            });
+
+            it('falls back to the split view when the answer is not one it knows', () => {
+                const {chrome, dispatch} = withSplitView();
+                vivaldiAnswers(chrome, undefined);
+                dispatch({action: 'openSplitView', url: 'https://dest/'}, senderFor(12));
+                expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
+            });
+
+            it('falls back to the split view when messaging Vivaldi throws', () => {
+                // A browser may throw on an extension id it does not have.
+                const {chrome, dispatch} = withSplitView();
+                chrome.runtime.sendMessage.mockImplementation(() => {
+                    throw new Error('Invalid extension id');
+                });
+                dispatch({action: 'openSplitView', url: 'https://dest/'}, senderFor(12));
+                expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
+                expect(bannered(chrome)).toEqual([]);
+            });
 
             it('opens the url split with the sender, focusing the new half', () => {
                 const {chrome, dispatch} = withSplitView();
@@ -1944,7 +2028,7 @@ describe('start', () => {
             });
 
             it('says so on a browser that cannot split tabs', () => {
-                const {chrome, dispatch} = bootstrap();
+                const {chrome, dispatch} = withoutSplitView();
                 dispatch({action: 'openSplitView', url: 'https://dest/'}, senderFor(12));
                 expect(chrome.tabs.create).not.toHaveBeenCalled();
                 expect(bannered(chrome)).toEqual([expect.stringContaining('not supported')]);
@@ -2008,7 +2092,11 @@ describe('start', () => {
                 const withTabs = (base, ...others) => {
                     const ctx = withSplitView();
                     const tabs = [base, ...others];
-                    ctx.chrome.tabs.get = jest.fn((id, cb) => cb(tabs.find((t) => t.id === id)));
+                    // Answered later, as the browser does: a callback run at once would
+                    // see the lastError of the Vivaldi message it was called from.
+                    ctx.chrome.tabs.get = jest.fn((id, cb) => {
+                        Promise.resolve().then(() => cb(tabs.find((t) => t.id === id)));
+                    });
                     ctx.chrome.tabs.unsplit = jest.fn((id, cb) => cb && cb());
                     return ctx;
                 };
@@ -2095,10 +2183,44 @@ describe('start', () => {
                 });
 
                 it('says so on a browser that cannot split tabs', async () => {
-                    const {chrome, dispatch} = bootstrap();
+                    const {chrome, dispatch} = withoutSplitView();
                     dispatch({action: 'splitWithTab', tabId: 13, active: true}, senderFor(12));
                     await flushPromises();
                     expect(bannered(chrome)).toEqual([expect.stringContaining('not supported')]);
+                });
+
+                describe('in Vivaldi', () => {
+                    it('asks the Vivaldi UI to tile the tab with the sender', async () => {
+                        const {chrome, dispatch} = withTabs(tab(12, {index: 1}), tab(13, {index: 5}));
+                        vivaldiAnswers(chrome, {ok: true});
+                        await split(dispatch, 13);
+                        expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(VIVALDI_UI_ID, {
+                            action: 'tileTab',
+                            tabId: 13,
+                            windowId: 1,
+                            baseTabId: 12,
+                            active: true,
+                        }, expect.any(Function));
+                        // Tiled by the mod: none of the createSplit preparation happens.
+                        expect(chrome.tabs.move).not.toHaveBeenCalled();
+                        expect(chrome.tabs.createSplit).not.toHaveBeenCalled();
+                        expect(bannered(chrome)).toEqual([]);
+                    });
+
+                    it('reports a failure from the mod without falling back', async () => {
+                        const {chrome, dispatch} = withTabs(tab(12, {index: 1}), tab(13, {index: 2}));
+                        vivaldiAnswers(chrome, {error: 'the tab did not show up in time'});
+                        await split(dispatch, 13);
+                        expect(chrome.tabs.createSplit).not.toHaveBeenCalled();
+                        expect(bannered(chrome)).toEqual([expect.stringContaining('did not show up')]);
+                    });
+
+                    it('does not ask about the current tab itself', async () => {
+                        const {chrome, dispatch} = withTabs(tab(12, {index: 1}));
+                        vivaldiAnswers(chrome, {ok: true});
+                        await split(dispatch, 12);
+                        expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+                    });
                 });
             });
         });
