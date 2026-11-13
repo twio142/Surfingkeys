@@ -21,6 +21,9 @@ import {
     tabOpenLink,
 } from './utils.js';
 
+// The class user_scripts/index.js tags an element with to hand it to Front.showEditor.
+const elementEditing = "surfingkeys--element--editing";
+
 function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
 
     function createKeyTarget(code, ag, repeatIgnore) {
@@ -442,10 +445,18 @@ function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
         "hints:setNumeric": hints.setNumeric,
         "hints:style": hints.style,
         "front:registerInlineQuery": front.registerInlineQuery,
-        "front:showEditor": (element, type, useNeovim) => {
-            front.showEditor(element, (data) => {
+        "front:showEditor": (element, type, useNeovim, hasOnWrite) => {
+            if (element === `.${elementEditing}`) {
+                const tagged = document.querySelectorAll(element);
+                element = tagged[0];
+                tagged.forEach((e) => e.classList.remove(elementEditing));
+                if (!element) {
+                    return;
+                }
+            }
+            front.showEditor(element, hasOnWrite ? (data) => {
                 dispatchSKEvent('user', ["onEditorWrite", data]);
-            }, type, useNeovim);
+            } : undefined, type, useNeovim);
         },
         "front:openOmnibar": front.openOmnibar,
         "normal:feedkeys": normal.feedkeys,

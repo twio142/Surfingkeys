@@ -290,7 +290,8 @@ const api = {
                 element = `.${elementEditing}`;
             }
             onEditorWriteFn = onWrite;
-            dispatchSKEvent('api', ['front:showEditor', element, type, useNeovim]);
+            // Without an onWrite, the content side writes back to the element itself.
+            dispatchSKEvent('api', ['front:showEditor', element, type, useNeovim, typeof(onWrite) === 'function']);
         },
         openOmnibar: (args) => {
             _pendingOnEnter = null;
